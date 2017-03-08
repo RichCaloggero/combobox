@@ -1,0 +1,201 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>combobox - tabindex</title>
+<style>
+.combobox .choices {display: none;}
+.combobox .choices li {list-style-type: none;}
+
+</style>
+</head>
+<body>
+<h1>ARIA Combobox</h1>
+<div>
+<h2>Description</h2>
+<p>This implements an ARIA combobox using tabindex to manage focus.
+Tabindex is used because it is more flexable than relying on aria-activedescendant which only allows and properly handles options with simple text content.
+it also turns out that aria-activedescendant causes the comboboxes label and type to be announced whenever aria-activedescendant is changed, which is annoying and overly verbose.
+This implementation handles item grouping via sublists as well as   by group and separator roles.
+</p><ul><li>
+up / down arrows move among choices and automatically navigate sublists
+</li><li>
+home / end navigate to first / last items of current list
+</li><li>
+enter chooses current item only if it is an option
+</li><li>
+tab and escape cancel and close, leaving focus on combobox input
+</li></ul>
+</div>
+
+
+<p><a href="#">Dummy Link</a></p>
+<div id="myCombobox" class="combobox" role="combobox" aria-expanded="false">
+<label>My Combobox: <input type="text" aria-haspopup="listbox"></label>
+
+<ul role="listbox" id="myCombobox_choices" class="choices" tabindex="-1">
+<li role="option">chocolate</li>
+<li role="option"><span>sublist</span>
+<ul role="group" aria-label="item list">
+<li role="option">item 2.1</li>
+<li role="option">item 2.2</li>
+</ul></li>
+<li role="option"><label>meat <input type="checkbox" checked></label>
+<li role="option">bacon</li>
+<li role="group" aria-label="more">--more options--</li>
+<li role="option">both group and separator roles can be used</li>
+<li role="option">and pressing enter on a separator does not close the combobox</li>
+<li role="separator" aria-label="even more">--even more--"</li>
+<li role="option">... but both require aria-label because child text not read</li>
+</ul>
+</div>
+<p><a href="#">Dummy Link</a></p>
+
+
+<script src="http://code.jquery.com/jquery.min.js"></script>
+<script src="debug.js"></script>
+<script>
+
+$(document).on ("keydown", "[role=combobox]", function (e) {
+var focusable = "input, textarea, a, button, [tabindex='0']";
+var $self = $(e.target).closest("[role=combobox]").first();
+var $input = $self.find("input");
+var $choices = $self.find("[role=listbox]");
+var id_active = $self.attr("id") + "_active";
+var id_choices = $choices.attr ("id");
+var key = e.which || e.keyCode;
+var $hasChildren = $choices.find("li").has("ul,ol").addClass("hasChildren");
+var $node;
+
+//debug ("combobox: ", key, $self.attr("id"), e.target.nodeName, current().length);
+$choices.find(focusable).attr("tabindex", "-1");
+
+if ($self.attr("aria-expanded") === "true") {
+if (key === 27) {
+close ();
+} else if (key === 9) {
+close ();
+$input.focus ();
+} else if (key === 13 && current().attr("role") === "option") {
+setValue (current());
+close ();
+return false;
+} else if (key === 38) {
+$node = previous();
+} else if (key === 40) {
+$node = next();
+} else if (key == 36) {
+$node = first ();
+} else if (key === 35) {
+$node = last ();
+
+} else {
+return true;
+} // if
+
+if (current().length > 0 && $node && $node[0] !== current()[0]) current($node);
+return false;
+
+} else if ($self.attr("aria-expanded") === "false") {
+if (key !== 38 && key !== 40) return true;
+//debug ("- input...");
+switch (key) {
+case 40: $node = $choices.children().first(); break;
+case 38: $node = $choices.children().last(); break;
+default: alert ("this should never happen"); return true;
+} // switch
+
+$choices.show ();
+$self.attr ("aria-expanded", "true");
+$input.attr ({
+"aria-controls": id_choices
+});
+current ($node);
+return false;
+} // if
+
+// helpers
+
+function close () {
+$choices.hide ();
+$self.attr ("aria-expanded", "false");
+$input.removeAttr ("aria-controls").focus();
+} // close
+
+function current ($node) {
+if ($node && $node.length === 1) return set ($node);
+else return get ();
+
+function get () {
+return $self.find(".active");
+} // get
+
+function set ($node) {
+//debug ("set: ", $node.text());
+current().removeClass("active");
+$node.addClass("active", id_active).attr("tabindex", "-1");
+setFocus ($node);
+return;
+
+function setFocus ($node) {
+var $child = $node.find (focusable).first();
+if ($child.length) $child.focus();
+else $node.focus ();
+} // setFocus
+} // set
+} // current
+
+function previous () {
+var $node = current().prev();
+if ($node.length === 0) $node = current().parent().closest("li", $self).prev();
+if ($node.is(".hasChildren")) $node = $node.find("li").last();
+return $node;
+} // previous
+
+function next () {
+var $node = current().next();
+if ($node.length === 0) $node = current().parent().closest("li", $self).next();
+if ($node.is(".hasChildren")) $node = $node.find("li").first();
+return $node;
+} // next
+
+function first () {
+return current().parent().children().first();
+} // first
+
+function last () {
+return current().parent().children().last();
+} // last
+
+function setValue (_$node) {
+var value;
+var $node = $(document.activeElement);
+if ($node.is (":input")) {
+if ($node.parent().is("label")) value = $node.parent().text();
+else if ($node.is ("[aria-label]")) value = $node.attr("aria-label");
+value += ": ";
+
+if ($node.is ("[type=checkbox]") || $node.is("[type=radio]")) value += $node.prop("checked");
+else text += $node.val();
+
+} else {
+value = $node.text();
+} // if
+
+$input.val (value);
+return value;
+} // setValue
+
+function removeCurrent () {
+current().removeAttr ("id");
+} // removeCurrent
+});
+
+//alert ("loaded");
+</script>
+
+<div id="debug" aria-live="polite">
+</div>
+
+</body>
+</html>
